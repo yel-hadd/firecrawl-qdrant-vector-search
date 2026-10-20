@@ -121,3 +121,31 @@ def test_dimension_mismatch_is_reported():
     with pytest.raises(SystemExit, match="1536-dim"):
         upsert_chunks(client, chunk_local(PAGES), name="t")
 
+
+
+def _doc(markdown, source_url=None, url=None, og_url=None):
+    meta = SimpleNamespace(source_url=source_url, url=url, og_url=og_url)
+    return SimpleNamespace(markdown=markdown, metadata=meta)
+
+
+def test_page_identity_prefers_source_url_then_loaded_url(caplog):
+    from src.crawl import pages_from_documents
+
+    docs = [
+        _doc("# A", source_url="https://s.dev/a", url="https://s.dev/a/"),
+        _doc("# B", url="https://s.dev/b"),                       # no source_url: use the loaded URL
+        _doc("# C", og_url="https://s.dev/"),                     # og:url is often the homepage: never trusted
+        _doc("   ", source_url="https://s.dev/empty"),            # nothing to index
+        SimpleNamespace(markdown="# D", metadata=None),
+    ]
+    with caplog.at_level("WARNING"):
+        pages = pages_from_documents(docs)
+    assert [p.url for p in pages] == ["https://s.dev/a", "https://s.dev/b"]
+    assert "Skipped 2 crawled page(s) without a URL" in caplog.text
+
+
+def test_duplicate_urls_are_indexed_once():
+    from src.crawl import pages_from_documents
+
+    pages = pages_from_documents([_doc("# old", source_url="https://s.dev/a"), _doc("# new", source_url="https://s.dev/a")])
+    assert [(p.url, p.markdown) for p in pages] == [("https://s.dev/a", "# new")]

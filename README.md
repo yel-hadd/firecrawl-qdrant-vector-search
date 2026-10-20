@@ -112,6 +112,28 @@ Dense vectors miss exact strings such as error codes, product names and version 
 **How do I keep the index in sync when pages change?**
 Upsert by a stable chunk ID, then delete points whose `url` matches the page and whose `document_hash` differs from the new one (`delete_stale` in `src/index.py`).
 
+**What if a document has no URL?**
+The `url` field is each document's identity: chunk IDs, change detection and cleanup are keyed on it. A crawled page without one is skipped with a warning, because giving several pages the same fallback ID would let them overwrite each other. For documents that aren't web pages (Markdown files, exported wikis, CMS records), use any ID that is unique and never changes, such as the file path:
+
+```python
+from pathlib import Path
+
+from src.chunk import chunk_with_apify, document_hash
+from src.crawl import Page
+from src.index import delete_stale, get_client, indexed_hashes, upsert_chunks
+
+pages = [Page(url=path.as_posix(), markdown=path.read_text()) for path in Path("handbook").rglob("*.md")]
+client = get_client()
+known = indexed_hashes(client, [p.url for p in pages])
+pages = [p for p in pages if known.get(p.url) != {document_hash(p.markdown)}]  # unchanged files cost $0
+
+chunks = chunk_with_apify(pages)
+upsert_chunks(client, chunks)
+delete_stale(client, chunks)
+```
+
+For PDFs, Word or PowerPoint files at a public URL, pass the URL to [Markdown RAG Chunker](https://apify.com/codepoetry/markdown-rag-chunker?fpr=use-apify) as `markdown_file` instead; it converts them to Markdown first.
+
 ## More guides
 
 - [Firecrawl + Qdrant tutorial](https://use-apify.com/blog/firecrawl-qdrant-vector-search): the full walkthrough for this repo

@@ -18,6 +18,7 @@ Firecrawl /crawl ──▶ Markdown per page ──▶ chunks (512 tokens, one s
   - `--chunker local`: LangChain's `RecursiveCharacterTextSplitter.from_tiktoken_encoder`. Free, runs locally, positional IDs.
 - **Embed**: OpenAI `text-embedding-3-small` when `OPENAI_API_KEY` is set, otherwise a local FastEmbed model (`BAAI/bge-small-en-v1.5`, CPU, no key). BM25 sparse vectors from FastEmbed.
 - **Index**: Qdrant named dense + sparse vectors with the IDF modifier, deterministic UUID point IDs, and stale-chunk cleanup by `document_hash`.
+- **Incremental re-runs**: pages whose content hash already matches Qdrant are skipped before chunking and embedding, so a nightly re-crawl only pays for what changed.
 - **Search**: Qdrant `query_points` with dense and sparse prefetch fused by RRF.
 
 ## Quick start
@@ -50,18 +51,31 @@ pytest
 | Section context | `header_path` in payload and in the embedded text | None |
 | Chunk IDs | Stable across re-crawls (content + source) | Position in page |
 | Token count | Exact, tiktoken `cl100k_base` | Exact, tiktoken `cl100k_base` |
-| Unchanged pages on a schedule | `skip_if_unchanged`: no chunks, $0.001 run fee | Re-chunked every time |
+| Unchanged pages on re-runs | Skipped before the Actor runs: $0 | Skipped before chunking: $0 |
 | Cost | $0.80 per 1,000 chunks + $0.001 per run (Apify free plan) | Free |
-| Runs | One Apify run per page | Locally |
+| Runs | One Apify run per page, 4 in parallel by default | Locally |
 
-Pick `local` for a one-off index. Pick `apify` when you re-crawl on a schedule and want unchanged sections to keep their points, or when a page's section path matters for retrieval (API references, docs with repeated subheadings like "Parameters").
+Pick `local` for a one-off index. Pick `apify` when a page's section path matters for retrieval (API references, docs with repeated subheadings like "Parameters"), or when you re-crawl on a schedule and want edited pages to keep the points of their unchanged sections.
+
+## Ingestion options
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--limit` | 50 | Max pages to crawl (1 Firecrawl credit each) |
+| `--include` | none | Only crawl URL paths matching this regex (repeatable) |
+| `--chunker` | `apify` | `apify` or `local` |
+| `--max-tokens` | 512 | Chunk size cap in tokens |
+| `--concurrency` | 4 | Parallel Apify runs |
+| `--max-charge-per-page` | 0.50 | USD cap per Apify run (~600 chunks). A page that hits it is skipped with a warning instead of being half-indexed |
+| `--force` | off | Re-chunk and re-embed unchanged pages too |
 
 ## Costs for a 50-page site
 
 | Item | Cost |
 |---|---|
 | Firecrawl crawl | 50 credits ([free plan: 1,000 credits/month](https://firecrawl.link/yassine-el-haddad)) |
-| Markdown RAG Chunker (~190 chunks) | ~$0.20 (50 runs × $0.001 + 190 × $0.0008) |
+| Markdown RAG Chunker, first run (~190 chunks) | ~$0.20 (50 runs × $0.001 + 190 × $0.0008) |
+| Markdown RAG Chunker, re-run with 5 changed pages | ~$0.02 (unchanged pages never reach the Actor) |
 | OpenAI `text-embedding-3-small` | well under $0.01 |
 | Qdrant | free (Docker or Qdrant Cloud free tier) |
 

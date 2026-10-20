@@ -7,10 +7,10 @@
 from typing import Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
-from src.index import get_client
+from src.index import COLLECTION, get_client
 from src.search import hybrid_search, semantic_search
 
 load_dotenv()
@@ -31,6 +31,12 @@ def search(
     limit: int = Query(5, ge=1, le=20),
     mode: Literal["semantic", "hybrid"] = "hybrid",
 ):
+    try:
+        ready = client.collection_exists(COLLECTION)
+    except Exception as exc:
+        raise HTTPException(503, f"Qdrant is unreachable: {exc}") from exc
+    if not ready:
+        raise HTTPException(503, f"Collection '{COLLECTION}' not found. Run ingest.py first.")
     if mode == "semantic":
         return semantic_search(client, q, limit)
     return hybrid_search(client, q, limit)

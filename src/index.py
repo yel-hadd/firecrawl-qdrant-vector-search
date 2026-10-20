@@ -14,15 +14,22 @@ def get_client() -> QdrantClient:
     url = os.environ.get("QDRANT_URL", "http://localhost:6333")
     if url == ":memory:":
         return QdrantClient(location=":memory:")
-    return QdrantClient(url=url, api_key=os.environ.get("QDRANT_API_KEY"))
+    return QdrantClient(url=url, api_key=os.environ.get("QDRANT_API_KEY") or None)
 
 
 def ensure_collection(client: QdrantClient, name: str = COLLECTION) -> None:
+    size = dense_size()
     if client.collection_exists(name):
+        existing = client.get_collection(name).config.params.vectors["dense"].size
+        if existing != size:
+            raise SystemExit(
+                f"Collection '{name}' stores {existing}-dim vectors but the current embedding model "
+                f"produces {size}. Set QDRANT_COLLECTION to a new name, or delete the collection."
+            )
         return
     client.create_collection(
         collection_name=name,
-        vectors_config={"dense": models.VectorParams(size=dense_size(), distance=models.Distance.COSINE)},
+        vectors_config={"dense": models.VectorParams(size=size, distance=models.Distance.COSINE)},
         # IDF lets Qdrant weight BM25 terms by how rare they are in the collection.
         sparse_vectors_config={"sparse": models.SparseVectorParams(modifier=models.Modifier.IDF)},
     )
@@ -34,8 +41,28 @@ def point_id(chunk_id: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, chunk_id))
 
 
+def indexed_hashes(client: QdrantClient, urls: list[str], name: str = COLLECTION) -> dict[str, set[str]]:
+    """``document_hash`` values already stored per URL, used to skip unchanged pages."""
+    if not urls or not client.collection_exists(name):
+        return {}
+    hashes: dict[str, set[str]] = {}
+    offset = None
+    url_filter = models.Filter(must=[models.FieldCondition(key="url", match=models.MatchAny(any=urls))])
+    while True:
+        points, offset = client.scroll(
+            name, scroll_filter=url_filter, limit=1000, offset=offset,
+            with_payload=["url", "document_hash"],
+        )
+        for p in points:
+            hashes.setdefault(p.payload["url"], set()).add(p.payload["document_hash"])
+        if offset is None:
+            return hashes
+
+
 def upsert_chunks(client: QdrantClient, chunks: list[dict], name: str = COLLECTION, batch_size: int = 100) -> int:
     ensure_collection(client, name)
+    if not chunks:
+        return 0
     texts = [c["text"] for c in chunks]
     dense = embed_dense(texts)
     sparse = embed_sparse(texts)
@@ -53,7 +80,7 @@ def upsert_chunks(client: QdrantClient, chunks: list[dict], name: str = COLLECTI
 
 
 def delete_stale(client: QdrantClient, chunks: list[dict], name: str = COLLECTION) -> None:
-    """Remove points left over from older versions of the re-crawled pages."""
+    """Remove older versions of the pages in ``chunks``. Other pages are left alone."""
     current = {c["url"]: c["document_hash"] for c in chunks}
     for url, doc_hash in current.items():
         client.delete(

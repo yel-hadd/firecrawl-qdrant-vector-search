@@ -1,0 +1,32 @@
+[{
+  "content": "Create an API key in the dashboard and send it in the `api-key` header.",
+  "metadata": {
+    "Header 1": "Authentication",
+    "Header 2": "API keys"
+  },
+  "header_path": "Authentication > API keys",
+  "chunk_id": "6ae7929690c5bf8b",
+  "chunk_index": 0,
+  "chunk_total": 2,
+  "source": "https://example.com/auth",
+  "document_hash": "a303951493cc6dcc",
+  "embedding_text": "Authentication > API keys\n\nCreate an API key in the dashboard and send it in the `api-key` header.",
+  "char_count": 71,
+  "token_count": 18
+},
+{
+  "content": "A 401 response means the key is missing or revoked.",
+  "metadata": {
+    "Header 1": "Authentication",
+    "Header 2": "Login errors"
+  },
+  "header_path": "Authentication > Login errors",
+  "chunk_id": "25273f9da6ab796e",
+  "chunk_index": 1,
+  "chunk_total": 2,
+  "source": "https://example.com/auth",
+  "document_hash": "a303951493cc6dcc",
+  "embedding_text": "Authentication > Login errors\n\nA 401 response means the key is missing or revoked.",
+  "char_count": 51,
+  "token_count": 12
+}]

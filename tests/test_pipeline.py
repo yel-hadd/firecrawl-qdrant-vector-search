@@ -79,8 +79,8 @@ class FakeApify:
         self.calls, self.running, self.peak = [], 0, 0
 
     def actor(self, actor_id):
-        async def call(run_input, max_total_charge_usd):
-            self.calls.append((run_input, max_total_charge_usd))
+        async def call(run_input):
+            self.calls.append(run_input)
             self.running += 1
             self.peak = max(self.peak, self.running)
             await asyncio.sleep(0.01)
@@ -103,20 +103,16 @@ def test_apify_chunker_concurrency_and_budget(monkeypatch):
 
     chunks = chunk_with_apify(pages, concurrency=3)
     assert len(fake.calls) == 8 and fake.peak <= 3
-    assert all(str(budget) == "0.50" for _, budget in fake.calls)
+    assert all(c["max_chunks"] == 600 and c["source_id"].startswith("https://") for c in fake.calls)
     assert len(chunks) == 8 * RECORDED[0]["chunk_total"]
     assert chunks[0]["text"] == RECORDED[0]["embedding_text"] and chunks[0]["section"] == RECORDED[0]["header_path"]
 
 
-def test_apify_chunker_skips_failed_and_partial_runs(monkeypatch):
+def test_apify_chunker_skips_failed_runs(monkeypatch):
     monkeypatch.setenv("APIFY_TOKEN", "test")
     failed = FakeApify({PAGES[0].url: RECORDED}, status="FAILED")
     monkeypatch.setattr("apify_client.ApifyClientAsync", lambda token: failed)
-    assert chunk_with_apify(PAGES[:1]) == []
-
-    partial = FakeApify({PAGES[0].url: RECORDED[:1]})  # 1 of 2 chunks: charge cap reached
-    monkeypatch.setattr("apify_client.ApifyClientAsync", lambda token: partial)
-    assert chunk_with_apify(PAGES[:1]) == []
+    assert chunk_with_apify(PAGES[:1]) == []  # e.g. over max_chunks: rejected before any chunk is billed
 
 
 def test_dimension_mismatch_is_reported():

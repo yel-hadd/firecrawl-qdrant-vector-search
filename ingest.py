@@ -7,7 +7,6 @@ Re-runs only chunk and embed pages whose content changed since the last run.
 
 import argparse
 import logging
-from decimal import Decimal
 
 from dotenv import load_dotenv
 
@@ -24,8 +23,8 @@ def main() -> None:
     parser.add_argument("--chunker", choices=["apify", "local"], default="apify")
     parser.add_argument("--max-tokens", type=int, default=512)
     parser.add_argument("--concurrency", type=int, default=4, help="parallel Apify runs (apify chunker)")
-    parser.add_argument("--max-charge-per-page", type=Decimal, default=Decimal("0.50"),
-                        help="USD cap per Apify run; $0.50 covers ~600 chunks (apify chunker)")
+    parser.add_argument("--max-chunks-per-page", type=int, default=600,
+                        help="skip pages that would produce more chunks; they cost only the $0.001 run fee (apify chunker)")
     parser.add_argument("--force", action="store_true", help="re-chunk and re-embed unchanged pages too")
     args = parser.parse_args()
 
@@ -43,7 +42,7 @@ def main() -> None:
 
     if args.chunker == "apify":
         chunks = chunk_with_apify(pages, max_tokens=args.max_tokens, concurrency=args.concurrency,
-                                  max_charge_usd=args.max_charge_per_page)
+                                  max_chunks=args.max_chunks_per_page)
     else:
         chunks = chunk_local(pages, max_tokens=args.max_tokens)
     print(f"Created {len(chunks)} chunks")

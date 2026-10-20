@@ -16,7 +16,6 @@ import hashlib
 import logging
 import os
 from collections.abc import Iterable
-from decimal import Decimal
 
 from .crawl import Page
 
@@ -74,31 +73,27 @@ def _to_chunk(item: dict) -> dict:
     }
 
 
-async def _chunk_page(client, page: Page, max_tokens: int, max_charge_usd: Decimal) -> list[dict]:
+async def _chunk_page(client, page: Page, max_tokens: int, max_chunks: int) -> list[dict]:
     # One run per document at the default 1 GB memory (one $0.001 start event).
-    # max_total_charge_usd caps what a single unexpectedly huge page can cost.
-    run = await client.actor(ACTOR_ID).call(
-        run_input={"markdown_text": page.markdown, "source_id": page.url, "max_chunk_tokens": max_tokens},
-        max_total_charge_usd=max_charge_usd,
-    )
+    # max_chunks is the budget guard: a page that would exceed it fails before
+    # any chunk is pushed, so it costs only the start fee.
+    run = await client.actor(ACTOR_ID).call(run_input={
+        "markdown_text": page.markdown,
+        "source_id": page.url,
+        "max_chunk_tokens": max_tokens,
+        "max_chunks": max_chunks,
+    })
     if run is None or run.status != "SUCCEEDED":
         log.warning("Chunking failed for %s: %s", page.url, run.status_message if run else "run did not start")
         return []
-    items = [item async for item in client.dataset(run.default_dataset_id).iterate_items()]
-    if items and len(items) < items[0]["chunk_total"]:
-        # The budget cap stopped delivery. Indexing a partial page would later
-        # look "unchanged" and never be completed, so skip it this time.
-        log.warning("Skipped %s: %d of %d chunks within the $%s cap; raise --max-charge-per-page",
-                    page.url, len(items), items[0]["chunk_total"], max_charge_usd)
-        return []
-    return [_to_chunk(item) for item in items]
+    return [_to_chunk(item) async for item in client.dataset(run.default_dataset_id).iterate_items()]
 
 
 def chunk_with_apify(
     pages: Iterable[Page],
     max_tokens: int = 512,
     concurrency: int = 4,
-    max_charge_usd: Decimal = Decimal("0.50"),
+    max_chunks: int = 600,
 ) -> list[dict]:
     from apify_client import ApifyClientAsync
 
@@ -108,7 +103,7 @@ def chunk_with_apify(
 
         async def bounded(page: Page) -> list[dict]:
             async with limit:
-                return await _chunk_page(client, page, max_tokens, max_charge_usd)
+                return await _chunk_page(client, page, max_tokens, max_chunks)
 
         results = await asyncio.gather(*(bounded(page) for page in pages))
         return [chunk for page_chunks in results for chunk in page_chunks]

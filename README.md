@@ -66,7 +66,7 @@ Pick `local` for a one-off index. Pick `apify` when a page's section path matter
 | `--chunker` | `apify` | `apify` or `local` |
 | `--max-tokens` | 512 | Chunk size cap in tokens |
 | `--concurrency` | 4 | Parallel Apify runs |
-| `--max-charge-per-page` | 0.50 | USD cap per Apify run (~600 chunks). A page that hits it is skipped with a warning instead of being half-indexed |
+| `--max-chunks-per-page` | 600 | Budget guard (~$0.48 per page at most). A page that would produce more chunks is rejected before any chunk is billed, costs only the $0.001 run fee, and is skipped with a warning |
 | `--force` | off | Re-chunk and re-embed unchanged pages too |
 
 ## Costs for a 50-page site

@@ -12,13 +12,13 @@ Firecrawl /crawl ──▶ Markdown per page ──▶ chunks (512 tokens, one s
 
 ## What you get
 
-- **Crawl**: Firecrawl Python SDK v4 (`firecrawl.crawl`) with `only_main_content`, so navigation and cookie banners never reach your embeddings.
+- **Crawl**: Firecrawl `crawl()` with `only_main_content`, so navigation and cookie banners never reach your embeddings.
 - **Chunk**, two interchangeable options:
   - `--chunker apify` (default): [Markdown RAG Chunker](https://apify.com/codepoetry/markdown-rag-chunker?fpr=use-apify) splits on headings first, caps sections at 512 real tokens, prepends the section path to the embedded text, and returns a **stable `chunk_id`**, so re-crawls update points instead of duplicating them.
   - `--chunker local`: LangChain's `RecursiveCharacterTextSplitter.from_tiktoken_encoder`. Free, runs locally, positional IDs.
 - **Embed**: OpenAI `text-embedding-3-small` when `OPENAI_API_KEY` is set, otherwise a local FastEmbed model (`BAAI/bge-small-en-v1.5`, CPU, no key). BM25 sparse vectors from FastEmbed.
 - **Index**: Qdrant named dense + sparse vectors with the IDF modifier, deterministic UUID point IDs, and stale-chunk cleanup by `document_hash`.
-- **Search**: `query_points` with dense, sparse and RRF prefetch (the current Qdrant query API; `search` and `recreate_collection` are gone or deprecated in `qdrant-client` 1.19).
+- **Search**: Qdrant `query_points` with dense and sparse prefetch fused by RRF.
 
 ## Quick start
 
@@ -36,7 +36,7 @@ uvicorn main:api --reload
 curl "http://localhost:8000/search?q=configure+authentication&mode=hybrid"
 ```
 
-Run the offline test (no API keys, in-memory Qdrant, local embeddings):
+Dependencies are pinned to the latest stable releases (October 2026). Run the offline test (no API keys, in-memory Qdrant, local embeddings):
 
 ```bash
 pytest

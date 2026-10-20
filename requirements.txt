@@ -1,0 +1,11 @@
+firecrawl-py>=4.0
+apify-client>=3.0
+qdrant-client>=1.15
+langchain-text-splitters>=1.0
+tiktoken>=0.7
+fastembed>=0.7
+openai>=1.0
+fastapi>=0.110
+uvicorn>=0.29
+python-dotenv>=1.0
+pytest>=8.0
